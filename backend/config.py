@@ -1,0 +1,8 @@
+import os
+
+HOST = os.getenv("SMARTDESK_HOST", "0.0.0.0")
+PORT = int(os.getenv("SMARTDESK_PORT", "8765"))
+DISCOVERY_PORT = int(os.getenv("SMARTDESK_DISCOVERY_PORT", "8766"))
+PAIRING_TIMEOUT = int(os.getenv("SMARTDESK_PAIRING_TIMEOUT", "120"))
+LOG_LEVEL = os.getenv("SMARTDESK_LOG_LEVEL", "INFO").upper()
+PROTOCOL_VERSION = "1.0"
