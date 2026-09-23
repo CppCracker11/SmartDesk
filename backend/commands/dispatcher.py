@@ -1,51 +1,54 @@
-import time
+import time as tim
 
+class Cmd:
+    def __init__(self, adp, log):
+        self.adp = adp
+        self.log = log
 
-class CommandDispatcher:
-    def __init__(self, adapter, logger):
-        self.adapter = adapter
-        self.logger = logger
-
-    def dispatch(self, message: dict) -> dict:
-        msg_id = message["id"]
-        msg_type = message["type"]
-        action = message["action"]
-        data = message.get("data", {})
-        started = time.perf_counter()
-
+    def run(self, msg):
+        mid, typ, act = msg["id"], msg["type"], msg["action"]
+        dat = msg.get("data", {})
+        ts = tim.perf_counter()
         try:
-            if msg_type == "mouse":
-                self._mouse(action, data)
-            elif msg_type == "keyboard":
-                self._keyboard(action, data)
-            elif msg_type == "media":
-                self.adapter.media_control(action)
-            elif msg_type == "presentation":
-                self.adapter.presentation_control(action)
-            else:
-                return {"id": msg_id, "status": "error", "error": {"code": "UNSUPPORTED_COMMAND", "message": "Command is not executable"}}
+            if typ == "mouse": self.mou(act, dat)
+            elif typ == "keyboard": self.key(act, dat)
+            elif typ == "media": self.adp.med(act)
+            elif typ == "presentation": self.adp.pre(act)
+            else: return {"id": mid, "status": "error", "error": {"code": "INVALID_COMMAND", "message": "command is not executable"}}
+        except (ValueError, KeyError, TypeError) as exc:
+            self.log.error("command failed: %s", exc)
+            return {"id": mid, "status": "error", "error": {"code": "INVALID_PARAMETER", "message": "invalid command parameter"}}
         except Exception as exc:
-            self.logger.error("Command failed: %s", exc)
-            return {"id": msg_id, "status": "error", "error": {"code": "OS_ERROR", "message": "Input control failed"}}
+            self.log.error("adapter command failed: %s", exc)
+            return {"id": mid, "status": "error", "error": {"code": "COMMAND_FAILED", "message": "input control failed"}}
+        ms = (tim.perf_counter() - ts) * 1000
+        return {"id": mid, "status": "ok", "data": {"processing_ms": round(ms, 3)}}
+    # Glossary:
+    # Cmd = command dispatcher
+    # run = dispatch command
+    # adp = adapter
+    # log = logger
+    # msg = message
+    # mid = message id
+    # typ = type
+    # act = action
+    # dat = data
+    # ts = start time
+    # ms = milliseconds
 
-        elapsed = (time.perf_counter() - started) * 1000
-        self.logger.info("Command: %s_%s (%.2f ms)", msg_type.upper(), action.upper(), elapsed)
-        return {"id": msg_id, "status": "ok", "data": {"processing_ms": round(elapsed, 3)}}
+    def mou(self, act, dat):
+        if act == "move": self.adp.mov(dat["dx"], dat["dy"])
+        elif act in {"left_click", "right_click", "middle_click"}: self.adp.clk(act[:-6])
+        elif act == "double_click": self.adp.dbl()
+        elif act == "scroll": self.adp.scr(dat.get("dx", 0), dat.get("dy", 0))
+        else: raise ValueError("invalid mouse action")
+    # Glossary:
+    # mou = mouse dispatch
 
-    def _mouse(self, action, data):
-        if action == "move":
-            self.adapter.mouse_move(data["dx"], data["dy"])
-        elif action in {"left_click", "right_click", "middle_click"}:
-            self.adapter.mouse_click(action.replace("_click", ""))
-        elif action == "double_click":
-            self.adapter.mouse_double_click()
-        elif action == "scroll":
-            self.adapter.mouse_scroll(data.get("dx", 0), data.get("dy", 0))
-
-    def _keyboard(self, action, data):
-        if action == "press":
-            self.adapter.key_press(data["key"])
-        elif action == "release":
-            self.adapter.key_release(data["key"])
-        elif action == "combo":
-            self.adapter.key_combo(data["keys"])
+    def key(self, act, dat):
+        if act == "press": self.adp.prs(dat["key"])
+        elif act == "release": self.adp.rel(dat["key"])
+        elif act == "combo": self.adp.cmb(dat["keys"])
+        else: raise ValueError("invalid keyboard action")
+    # Glossary:
+    # key = keyboard dispatch

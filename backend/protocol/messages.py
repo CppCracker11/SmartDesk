@@ -1,28 +1,31 @@
-import json
-from typing import Any
+import json as js
 
 
-def encode_message(message: dict[str, Any]) -> bytes:
-    return (json.dumps(message, separators=(",", ":")) + "\n").encode("utf-8")
+def enc(msg):
+    return (js.dumps(msg, separators=(",", ":")) + "\n").encode("utf-8")
+# Glossary:
+# enc = encode
 
 
-def decode_message(line: bytes) -> dict[str, Any]:
-    value = json.loads(line.decode("utf-8"))
-    if not isinstance(value, dict):
-        raise ValueError("Message must be a JSON object")
-    return value
+def dec(dat):
+    val = js.loads(dat.decode("utf-8"))
+    if not isinstance(val, dict):
+        raise ValueError("message must be an object")
+    return val
+# Glossary:
+# dec = decode
 
 
-def ok_response(message_id: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
-    response = {"id": message_id, "status": "ok"}
-    if data:
-        response["data"] = data
-    return response
+def ok(i, dat=None):
+    res = {"id": i, "status": "ok"}
+    if dat is not None:
+        res["data"] = dat
+    return res
+# Glossary:
+# ok = success response
 
 
-def error_response(message_id: str, code: str, message: str) -> dict[str, Any]:
-    return {
-        "id": message_id,
-        "status": "error",
-        "error": {"code": code, "message": message},
-    }
+def err(i, cod, txt):
+    return {"id": i, "status": "error", "error": {"code": cod, "message": txt}}
+# Glossary:
+# err = error response

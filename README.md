@@ -1,136 +1,99 @@
 # SmartDesk
 
-SmartDesk is a small cross-platform LAN productivity controller. A controller sends structured JSON commands over TCP to a host computer. The host authenticates the controller, validates commands, dispatches them, and translates them through an OS adapter.
+SmartDesk is a cross-platform LAN productivity controller. An Android controller can send versioned JSON commands over TCP to a host computer. The host validates, authenticates and dispatches commands through a platform adapter.
 
-## Features
+## Included
 
-- TCP client-server communication
-- Newline-delimited JSON message framing
-- UDP LAN discovery with manual IP fallback
+- TCP with newline-delimited JSON framing
+- Explicit connection/authentication lifecycle
 - One-time six-digit pairing code
-- Session token authentication and reconnect/resume
+- Session token resume after temporary disconnect until session expiry
+- One active authenticated controller per host
+- UDP LAN discovery with manual IP/port fallback
 - Mouse, keyboard, media and presentation commands
-- Windows, Linux and macOS adapter modules
-- Host information and ping latency measurement
-- Beginner-friendly modular code
-- Standard-library test suite
-- Temporary Tkinter test client
+- Windows, Linux and macOS adapters through `pynput`
+- Ping/pong timestamps for client-side RTT measurement
+- Standard-library tests
+- Small command-line backend test client
 
-## Architecture
+## Run
 
-```text
-Controller / Test Client
-        |
-        | LAN TCP + UDP discovery
-        v
-SmartDesk Server
-        |
-        +-- Connection Manager
-        +-- Pairing / Session
-        +-- Protocol Parser + Validator
-        +-- Command Dispatcher
-        |
-        v
-     OSAdapter
-     /   |   \
-Windows Linux macOS
-```
-
-The application protocol is platform-independent. Only the OS adapter translates generic commands into local input events.
-
-## Requirements
-
-- Python 3.10 or newer
-- `pynput==1.8.2`
-- Tkinter for the temporary GUI client (normally included with desktop Python; some Linux distributions package it separately)
-
-Install dependencies:
+Python 3.10+ is required.
 
 ```bash
 python -m pip install -r requirements.txt
-```
-
-## Run the host
-
-From the SmartDesk directory:
-
-```bash
 python -m backend.main
 ```
 
-The server prints a six-digit pairing code. Default ports are TCP `8765` and UDP discovery `8766`.
+The host listens on TCP `8765` and UDP `8766` by default and prints the temporary pairing code.
 
-Configuration can be changed with environment variables:
+Environment variables:
 
-```text
-SMARTDESK_HOST
-SMARTDESK_PORT
-SMARTDESK_DISCOVERY_PORT
-SMARTDESK_PAIRING_TIMEOUT
-SMARTDESK_LOG_LEVEL
-```
+- `SMARTDESK_HOST`
+- `SMARTDESK_PORT`
+- `SMARTDESK_DISCOVERY_PORT`
+- `SMARTDESK_PAIRING_TIMEOUT`
+- `SMARTDESK_SESSION_TIMEOUT`
+- `SMARTDESK_LOG_LEVEL`
 
-## Run the temporary client
-
-From the SmartDesk directory:
-
-```bash
-python test_client/client.py
-```
-
-Use **Discover** on the same LAN, or type the host IP and port manually. Then connect and enter the pairing code shown by the host.
-
-## Testing
-
-Run:
+## Test
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-The tests cover message framing, validation, pairing, session tokens, dispatcher routing, a real loopback TCP ping, and pairing/resume on the SmartDesk server.
+## Test client
 
-## Protocol summary
-
-Every application message is one JSON object followed by `\\n`.
-
-```json
-{
-  "version": "1.0",
-  "id": "12345",
-  "type": "mouse",
-  "action": "move",
-  "data": {"dx": 12, "dy": -5},
-  "token": "..."
-}
+```bash
+python test_client/client.py
 ```
 
-Responses contain the same `id` and either `status: ok` or `status: error`.
+It connects to the host, pairs, and can exercise ping, host information, mouse movement and keyboard press/release. It is only a backend test tool, not the Android application.
 
-See `docs/protocol.md` for the complete command contract.
+## Protocol
 
-## Security notes
+Transport is TCP. Each message is one UTF-8 JSON object terminated by `\n`.
 
-SmartDesk is a prototype intended primarily for a trusted local network. Pairing is not a replacement for TLS. Commands are explicitly whitelisted and arbitrary shell execution is not supported. Do not expose the server directly to the public Internet.
+```json
+{"version":"1.0","id":"abc123","type":"mouse","action":"move","data":{"dx":10,"dy":-4},"token":"..."}
+```
 
-## Known limitations
+Authentication:
 
-- Linux input injection depends on the desktop/input backend. X11 is the primary supported Linux configuration. Wayland security policies may prevent or limit synthetic input.
-- macOS requires appropriate Accessibility/Input Monitoring permissions depending on the operation and macOS version.
-- Media-key behavior can vary by desktop environment and application.
-- The temporary GUI is intentionally simple and is not the final mobile controller.
-- Discovery can be blocked by a firewall or Wi-Fi client isolation; manual IP entry remains available.
-- The prototype does not provide TLS, cloud connectivity, screen streaming, clipboard synchronization, or file transfer.
+1. Connect.
+2. Send `auth/pair` with the six-digit code.
+3. Receive a session token.
+4. Include the token in later commands.
+5. If TCP temporarily disconnects, use `auth/resume` with the same token after reconnecting.
+6. A valid token and an active TCP connection are separate states; a temporary disconnect does not immediately expire the session.
 
-## Project documentation
+Commands are rejected until authentication succeeds.
 
-- `docs/architecture.md` — component architecture
-- `docs/protocol.md` — application protocol and commands
-- `docs/cross_platform.md` — OS adapter and platform limitations
-- `docs/networking_concepts.md` — Computer Networks concepts demonstrated
-- `docs/setup.md` — platform setup
-- `docs/testing.md` — test and demo procedure
+## Platform notes
 
-## Future scope
+- Windows: `pynput` uses the local input system. Windows may ask for firewall permission for the private LAN.
+- Linux: synthetic input normally works best on X11. Wayland desktop security can restrict it.
+- macOS: Accessibility/Input Monitoring permissions may be required.
+- Media keys vary by platform/desktop environment; unsupported operations return `COMMAND_FAILED` instead of being reported as successful.
 
-QR pairing, clipboard synchronization, file transfer, macros, richer host telemetry, and a polished mobile application can be added later without changing the core command model.
+## Network/security scope
+
+This is a trusted-LAN prototype. TCP is the command channel and UDP is only discovery. The host is not designed to be exposed directly to the public Internet and does not implement TLS, cloud infrastructure, screen streaming, file transfer or remote desktop features.
+
+## Structure
+
+```text
+SmartDesk/
+  backend/
+    commands/
+    network/
+    os_adapters/
+    protocol/
+    security/
+    utils/
+  test_client/
+  tests/
+  docs/
+  scripts/
+  requirements.txt
+```

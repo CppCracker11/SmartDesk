@@ -1,6 +1,4 @@
-from typing import Any
-
-ALLOWED_TYPES = {
+TYP = {
     "auth": {"pair", "resume"},
     "mouse": {"move", "left_click", "right_click", "double_click", "middle_click", "scroll"},
     "keyboard": {"press", "release", "combo"},
@@ -8,73 +6,69 @@ ALLOWED_TYPES = {
     "presentation": {"next", "previous"},
     "system": {"ping", "get_host_info", "disconnect"},
 }
+KEY = {"ENTER","ESC","BACKSPACE","TAB","SHIFT","CTRL","ALT","CMD","SPACE","UP","DOWN","LEFT","RIGHT","HOME","END","PAGEUP","PAGEDOWN","DELETE","INSERT","CAPSLOCK","F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12"}
 
-ALLOWED_KEYS = {
-    "ENTER", "ESC", "BACKSPACE", "TAB", "SHIFT", "CTRL", "ALT", "SPACE",
-    "UP", "DOWN", "LEFT", "RIGHT", "HOME", "END", "PAGEUP", "PAGEDOWN",
-    "DELETE", "INSERT", "CAPSLOCK", "F1", "F2", "F3", "F4", "F5", "F6",
-    "F7", "F8", "F9", "F10", "F11", "F12",
-}
+def num(val):
+    return isinstance(val, (int, float)) and not isinstance(val, bool)
+# Glossary:
+# num = number check
+# val = value
 
+def key(val):
+    if not isinstance(val, str) or len(val) > 32 or not val:
+        return False
+    up = val.upper()
+    return len(val) == 1 and val.isprintable() or up in KEY
+# Glossary:
+# key = key validation
+# up = uppercase key
 
-def _number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
-
-
-def validate_message(message: dict[str, Any]) -> tuple[bool, str, str]:
-    if message.get("version") != "1.0":
-        return False, "UNSUPPORTED_VERSION", "Unsupported protocol version"
-    if not isinstance(message.get("id"), str) or not message["id"]:
-        return False, "INVALID_ID", "Message id must be a non-empty string"
-    if not isinstance(message.get("type"), str) or not isinstance(message.get("action"), str):
+def val(msg):
+    if not isinstance(msg, dict):
+        return False, "INVALID_MESSAGE", "message must be an object"
+    if msg.get("version") != "1.0":
+        return False, "UNSUPPORTED_VERSION", "unsupported protocol version"
+    if not isinstance(msg.get("id"), str) or not msg["id"] or len(msg["id"]) > 128:
+        return False, "INVALID_MESSAGE", "id must be a non-empty string"
+    typ, act = msg.get("type"), msg.get("action")
+    if not isinstance(typ, str) or not isinstance(act, str):
         return False, "INVALID_MESSAGE", "type and action are required"
-
-    msg_type = message["type"]
-    action = message["action"]
-    if msg_type not in ALLOWED_TYPES or action not in ALLOWED_TYPES[msg_type]:
-        return False, "INVALID_COMMAND", "Unknown command"
-
-    data = message.get("data", {})
-    if not isinstance(data, dict):
-        return False, "INVALID_DATA", "data must be an object"
-
-    if msg_type == "mouse" and action == "move":
-        if not _number(data.get("dx")) or not _number(data.get("dy")):
-            return False, "INVALID_DATA", "dx and dy must be numbers"
-        if abs(data["dx"]) > 2000 or abs(data["dy"]) > 2000:
-            return False, "INVALID_DATA", "mouse movement is out of range"
-
-    if msg_type == "mouse" and action == "scroll":
-        if not _number(data.get("dx", 0)) or not _number(data.get("dy", 0)):
-            return False, "INVALID_DATA", "scroll values must be numbers"
-        if abs(data.get("dx", 0)) > 50 or abs(data.get("dy", 0)) > 50:
-            return False, "INVALID_DATA", "scroll value is out of range"
-
-    if msg_type == "keyboard" and action in {"press", "release"}:
-        key = data.get("key")
-        if not isinstance(key, str) or len(key) > 32:
-            return False, "INVALID_DATA", "key must be a short string"
-        upper = key.upper()
-        if len(key) == 1 and key.isprintable():
-            pass
-        elif upper not in ALLOWED_KEYS:
-            return False, "INVALID_DATA", "unsupported key"
-
-    if msg_type == "keyboard" and action == "combo":
-        keys = data.get("keys")
-        if not isinstance(keys, list) or not keys or len(keys) > 6:
-            return False, "INVALID_DATA", "keys must be a list of 1 to 6 keys"
-        for key in keys:
-            if not isinstance(key, str):
-                return False, "INVALID_DATA", "each key must be a string"
-            if len(key) != 1 and key.upper() not in ALLOWED_KEYS:
-                return False, "INVALID_DATA", "unsupported key in combination"
-
-    if msg_type == "auth" and action == "pair":
-        if not isinstance(data.get("code"), str) or len(data["code"]) != 6 or not data["code"].isdigit():
-            return False, "INVALID_DATA", "pairing code must be six digits"
-    if msg_type == "auth" and action == "resume":
-        if not isinstance(data.get("token"), str) or len(data["token"]) < 16:
-            return False, "INVALID_DATA", "session token is required"
-
+    if typ not in TYP or act not in TYP[typ]:
+        return False, "INVALID_COMMAND", "unknown command"
+    dat = msg.get("data", {})
+    if not isinstance(dat, dict):
+        return False, "INVALID_PARAMETER", "data must be an object"
+    if typ == "mouse" and act == "move":
+        if not num(dat.get("dx")) or not num(dat.get("dy")):
+            return False, "INVALID_PARAMETER", "dx and dy must be numbers"
+        if abs(dat["dx"]) > 2000 or abs(dat["dy"]) > 2000:
+            return False, "INVALID_PARAMETER", "mouse movement is out of range"
+    if typ == "mouse" and act == "scroll":
+        if not num(dat.get("dx", 0)) or not num(dat.get("dy", 0)):
+            return False, "INVALID_PARAMETER", "scroll values must be numbers"
+        if abs(dat.get("dx", 0)) > 50 or abs(dat.get("dy", 0)) > 50:
+            return False, "INVALID_PARAMETER", "scroll value is out of range"
+    if typ == "keyboard" and act in {"press", "release"} and not key(dat.get("key")):
+        return False, "INVALID_PARAMETER", "unsupported key"
+    if typ == "keyboard" and act == "combo":
+        ks = dat.get("keys")
+        if not isinstance(ks, list) or not 1 <= len(ks) <= 6 or not all(key(x) for x in ks):
+            return False, "INVALID_PARAMETER", "keys must contain 1 to 6 supported keys"
+    if typ == "auth" and act == "pair":
+        cod = dat.get("code")
+        if not isinstance(cod, str) or len(cod) != 6 or not cod.isdigit():
+            return False, "INVALID_PARAMETER", "pairing code must be six digits"
+    if typ == "auth" and act == "resume":
+        tok = dat.get("token")
+        if not isinstance(tok, str) or len(tok) < 16:
+            return False, "INVALID_PARAMETER", "session token is required"
     return True, "", ""
+# Glossary:
+# val = validate
+# msg = message
+# typ = type
+# act = action
+# dat = data
+# ks = keys
+# tok = token
+# cod = code

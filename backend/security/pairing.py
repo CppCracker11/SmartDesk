@@ -1,28 +1,34 @@
-import secrets
-import time
+import secrets as sec
+import time as tim
 
+class Pai:
+    def __init__(self, tmo):
+        self.tmo = tmo
+        self.cod = self.new()
+        self.ts = tim.monotonic()
+        self.use = False
 
-class PairingManager:
-    def __init__(self, timeout: int):
-        self.timeout = timeout
-        self.code = self._new_code()
-        self.created = time.monotonic()
-        self.used = False
+    def new(self):
+        return f"{sec.randbelow(1000000):06d}"
+    # Glossary:
+    # new = new pairing code
 
-    def _new_code(self) -> str:
-        return f"{secrets.randbelow(1_000_000):06d}"
+    def get(self):
+        if tim.monotonic() - self.ts >= self.tmo or self.use:
+            self.cod = self.new()
+            self.ts = tim.monotonic()
+            self.use = False
+        return self.cod
+    # Glossary:
+    # get = get active code
 
-    def get_code(self) -> str:
-        if time.monotonic() - self.created >= self.timeout or self.used:
-            self.code = self._new_code()
-            self.created = time.monotonic()
-            self.used = False
-        return self.code
-
-    def verify(self, code: str) -> bool:
-        if self.used or time.monotonic() - self.created >= self.timeout:
+    def ver(self, cod):
+        if self.use or tim.monotonic() - self.ts >= self.tmo:
             return False
-        if secrets.compare_digest(code, self.code):
-            self.used = True
+        if sec.compare_digest(cod, self.cod):
+            self.use = True
             return True
         return False
+    # Glossary:
+    # ver = verify code
+    # cod = code

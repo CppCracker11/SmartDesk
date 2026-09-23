@@ -1,31 +1,29 @@
-import unittest
+import unittest as uni
+from backend.commands.dispatcher import Cmd
 
-from backend.commands.dispatcher import CommandDispatcher
+class Fak:
+    def __init__(self): self.cal=[]
+    def mov(self,x,y): self.cal.append(("mov",x,y))
+    def clk(self,x): self.cal.append(("clk",x))
+    def dbl(self): self.cal.append(("dbl",))
+    def scr(self,x,y): self.cal.append(("scr",x,y))
+    def prs(self,x): self.cal.append(("prs",x))
+    def rel(self,x): self.cal.append(("rel",x))
+    def cmb(self,x): self.cal.append(("cmb",x))
+    def med(self,x): self.cal.append(("med",x))
+    def pre(self,x): self.cal.append(("pre",x))
 
+class DT(uni.TestCase):
+    def t01(self):
+        a=Fak(); l=type("L",(),{"info":lambda *x:None,"error":lambda *x:None})(); c=Cmd(a,l)
+        r=c.run({"id":"1","type":"mouse","action":"move","data":{"dx":3,"dy":4}})
+        self.assertEqual(r["status"],"ok"); self.assertEqual(a.cal,[("mov",3,4)])
 
-class FakeAdapter:
-    def __init__(self):
-        self.calls = []
+    def t02(self):
+        a=Fak(); l=type("L",(),{"info":lambda *x:None,"error":lambda *x:None})(); c=Cmd(a,l)
+        r=c.run({"id":"1","type":"keyboard","action":"combo","data":{"keys":["CTRL","c"]}})
+        self.assertEqual(r["status"],"ok"); self.assertEqual(a.cal,[("cmb",["CTRL","c"])])
 
-    def mouse_move(self, dx, dy): self.calls.append(("move", dx, dy))
-    def mouse_click(self, button): self.calls.append(("click", button))
-    def mouse_double_click(self): self.calls.append(("double",))
-    def mouse_scroll(self, dx, dy): self.calls.append(("scroll", dx, dy))
-    def key_press(self, key): self.calls.append(("press", key))
-    def key_release(self, key): self.calls.append(("release", key))
-    def key_combo(self, keys): self.calls.append(("combo", keys))
-    def media_control(self, action): self.calls.append(("media", action))
-    def presentation_control(self, action): self.calls.append(("presentation", action))
-
-
-class DispatcherTests(unittest.TestCase):
-    def test_mouse_dispatch(self):
-        adapter = FakeAdapter()
-        dispatcher = CommandDispatcher(adapter, type("L", (), {"info": lambda *x: None, "error": lambda *x: None})())
-        response = dispatcher.dispatch({"id": "1", "type": "mouse", "action": "move", "data": {"dx": 3, "dy": 4}})
-        self.assertEqual(response["status"], "ok")
-        self.assertEqual(adapter.calls, [("move", 3, 4)])
-
-
-if __name__ == "__main__":
-    unittest.main()
+setattr(DT, "test_t01", DT.t01)
+setattr(DT, "test_t02", DT.t02)
+if __name__ == "__main__": uni.main()

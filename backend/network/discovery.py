@@ -1,32 +1,36 @@
-import asyncio
-import json
+import asyncio as aio
+import json as js
 
+class Dis(aio.DatagramProtocol):
+    def __init__(self, fac, log):
+        self.fac, self.log, self.trn = fac, log, None
 
-class DiscoveryProtocol(asyncio.DatagramProtocol):
-    def __init__(self, response_factory, logger):
-        self.response_factory = response_factory
-        self.logger = logger
-        self.transport = None
+    def mad(self, trn): self.trn = trn
+    # Glossary:
+    # mad = connection made
+    # trn = transport
 
-    def connection_made(self, transport):
-        self.transport = transport
+    def got(self, dat, adr):
+        if dat.decode("utf-8", "ignore").strip() != "SMARTDESK_DISCOVER": return
+        self.trn.sendto(js.dumps(self.fac(), separators=(",", ":")).encode(), adr)
+    # Glossary:
+    # dat = datagram
+    # adr = address
 
-    def datagram_received(self, data, addr):
-        if data.decode("utf-8", errors="ignore").strip() != "SMARTDESK_DISCOVER":
-            return
-        response = json.dumps(self.response_factory()).encode("utf-8")
-        self.transport.sendto(response, addr)
-        self.logger.info("Discovery response sent to %s", addr[0])
+    def bad(self, exc): self.log.error("discovery error: %s", exc)
+    # Glossary:
+    # bad = error callback
+    # exc = exception
 
-    def error_received(self, exc):
-        self.logger.error("Discovery error: %s", exc)
+setattr(Dis, "connection_made", Dis.mad)
+setattr(Dis, "datagram_received", Dis.got)
+setattr(Dis, "error_received", Dis.bad)
 
-
-async def start_discovery(loop, port, response_factory, logger):
-    transport, _ = await loop.create_datagram_endpoint(
-        lambda: DiscoveryProtocol(response_factory, logger),
-        local_addr=("0.0.0.0", port),
-        allow_broadcast=True,
-    )
-    logger.info("UDP discovery listening on port %s", port)
-    return transport
+async def new(loop, prt, fac, log):
+    trn, _ = await loop.create_datagram_endpoint(lambda: Dis(fac, log), local_addr=("0.0.0.0", prt), allow_broadcast=True)
+    return trn
+# Glossary:
+# new = start discovery
+# loop = event loop
+# prt = port
+# fac = response factory

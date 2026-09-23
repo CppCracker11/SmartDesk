@@ -1,115 +1,117 @@
-import asyncio
-import time
+import asyncio as aio
+import time as tim
+from ..protocol.messages import enc, ok, err
+from ..protocol.parser import Pro
+from ..protocol.validator import val
 
-from ..protocol.messages import encode_message, error_response, ok_response
-from ..protocol.validator import validate_message
+class Con:
+    def __init__(self, rdr, wtr, pai, ses, cmd, inf, log):
+        self.rdr, self.wtr, self.pai, self.ses = rdr, wtr, pai, ses
+        self.cmd, self.inf, self.log = cmd, inf, log
+        self.aut = False
+        self.tok = None
+        self.cid = id(self)
+        self.pro = Pro()
+        self.sta = "CONNECTING"
 
-
-class ClientConnection:
-    def __init__(self, reader, writer, pairing, session, dispatcher, host_info, logger):
-        self.reader = reader
-        self.writer = writer
-        self.pairing = pairing
-        self.session = session
-        self.dispatcher = dispatcher
-        self.host_info = host_info
-        self.logger = logger
-        self.authenticated = False
-        self.parser_buffer = bytearray()
-
-    async def send(self, message):
-        self.writer.write(encode_message(message))
-        await self.writer.drain()
+    async def snd(self, msg):
+        self.wtr.write(enc(msg))
+        await self.wtr.drain()
+    # Glossary:
+    # snd = send
+    # msg = message
 
     async def run(self):
-        peer = self.writer.get_extra_info("peername")
-        self.logger.info("Client connected: %s", peer[0] if peer else "unknown")
-        self.writer.write(encode_message({"type": "state", "state": "AUTHENTICATING"}))
-        await self.writer.drain()
-
+        self.sta = "CONNECTED"
+        await self.snd({"type": "state", "state": "AUTHENTICATING"})
         try:
             while True:
-                data = await self.reader.read(4096)
-                if not data:
+                dat = await self.rdr.read(4096)
+                if not dat:
                     break
-                self.parser_buffer.extend(data)
-                if len(self.parser_buffer) > 65536:
-                    await self.send(error_response("", "MESSAGE_TOO_LARGE", "Message is too large"))
+                try:
+                    msgs = self.pro.fed(dat)
+                except ValueError as exc:
+                    cod = "INVALID_JSON" if str(exc) == "invalid json" else "INVALID_MESSAGE"
+                    await self.snd(err("", cod, "invalid SmartDesk message"))
                     break
-
-                while b"\n" in self.parser_buffer:
-                    index = self.parser_buffer.index(b"\n")
-                    line = bytes(self.parser_buffer[:index]).strip()
-                    del self.parser_buffer[:index + 1]
-                    if not line:
-                        continue
-                    await self.handle_line(line)
-        except (ConnectionError, TimeoutError, asyncio.CancelledError):
+                for msg in msgs:
+                    await self.msg(msg)
+        except (aio.CancelledError, ConnectionError, BrokenPipeError):
             pass
         except Exception as exc:
-            self.logger.error("Client handling error: %s", exc)
+            self.log.error("connection error: %s", exc)
         finally:
-            self.writer.close()
+            self.sta = "DISCONNECTED"
+            self.ses.rel(self.tok, self.cid)
+            self.wtr.close()
             try:
-                await self.writer.wait_closed()
+                await self.wtr.wait_closed()
             except Exception:
                 pass
-            self.logger.info("Client disconnected")
+    # Glossary:
+    # run = connection loop
+    # dat = bytes
+    # msgs = messages
+    # msg = message
+    # exc = exception
 
-    async def handle_line(self, line: bytes):
-        import json
+    async def msg(self, msg):
         try:
-            message = json.loads(line.decode("utf-8"))
-            if not isinstance(message, dict):
-                raise ValueError
-        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
-            await self.send(error_response("", "INVALID_JSON", "Invalid SmartDesk message"))
+            good, cod, txt = val(msg)
+        except Exception:
+            good, cod, txt = False, "INVALID_MESSAGE", "invalid message"
+        mid = msg.get("id", "") if isinstance(msg, dict) else ""
+        if not good:
+            await self.snd(err(mid, cod, txt))
             return
-
-        valid, code, text = validate_message(message)
-        msg_id = message.get("id", "")
-        if not valid:
-            await self.send(error_response(msg_id, code, text))
-            return
-
-        msg_type = message["type"]
-        action = message["action"]
-        if not self.authenticated:
-            if msg_type != "auth":
-                await self.send(error_response(msg_id, "UNAUTHORIZED", "Pair the controller before sending commands"))
+        typ, act = msg["type"], msg["action"]
+        if not self.aut:
+            if typ != "auth":
+                await self.snd(err(mid, "NOT_AUTHENTICATED", "authenticate before sending commands"))
                 return
-            if action == "pair":
-                if not self.pairing.verify(message["data"]["code"]):
-                    await self.send(error_response(msg_id, "PAIRING_FAILED", "Pairing failed"))
+            if act == "pair":
+                if self.ses.has():
+                    await self.snd(err(mid, "HOST_BUSY", "another controller is active"))
                     return
-                token = self.session.create()
-                self.authenticated = True
-                self.logger.info("Pairing successful")
-                await self.send(ok_response(msg_id, {"token": token, "state": "AUTHENTICATED"}))
-                return
-            if action == "resume":
-                token = message["data"]["token"]
-                if not self.session.valid(token):
-                    await self.send(error_response(msg_id, "RESUME_FAILED", "Session token is invalid or expired"))
+                if not self.pai.ver(msg["data"]["code"]):
+                    await self.snd(err(mid, "PAIRING_FAILED", "pairing failed"))
                     return
-                self.authenticated = True
-                await self.send(ok_response(msg_id, {"token": token, "state": "AUTHENTICATED"}))
-                return
-
-        if message.get("token") is None or not self.session.valid(message.get("token")):
-            await self.send(error_response(msg_id, "UNAUTHORIZED", "Invalid session token"))
-            return
-
-        if msg_type == "system":
-            if action == "ping":
-                now = time.time_ns()
-                await self.send(ok_response(msg_id, {"pong_ns": now}))
-            elif action == "get_host_info":
-                await self.send(ok_response(msg_id, self.host_info))
-            elif action == "disconnect":
-                await self.send(ok_response(msg_id))
-                self.writer.close()
-            return
-
-        response = self.dispatcher.dispatch(message)
-        await self.send(response)
+                self.tok = self.ses.new(self.cid)
+                self.aut = True
+                self.sta = "ACTIVE"
+                await self.snd(ok(mid, {"token": self.tok, "state": self.sta})); return
+            if act == "resume":
+                tok = msg["data"]["token"]
+                if not self.ses.ok(tok):
+                    await self.snd(err(mid, "SESSION_EXPIRED", "session token is invalid or expired")); return
+                if self.ses.act:
+                    await self.snd(err(mid, "HOST_BUSY", "another controller is active")); return
+                if not self.ses.use(tok, self.cid):
+                    await self.snd(err(mid, "SESSION_EXPIRED", "session token is invalid or expired")); return
+                self.tok = tok
+                self.aut = True
+                self.sta = "ACTIVE"
+                await self.snd(ok(mid, {"token": tok, "state": self.sta})); return
+        tok = msg.get("token")
+        if not tok or not self.ses.ok(tok) or tok != self.tok or not self.ses.act:
+            await self.snd(err(mid, "SESSION_EXPIRED", "session token is invalid or expired")); return
+        if typ == "system":
+            if act == "ping":
+                await self.snd(ok(mid, {"pong_ns": tim.time_ns()})); return
+            if act == "get_host_info":
+                await self.snd(ok(mid, self.inf)); return
+            if act == "disconnect":
+                await self.snd(ok(mid)); self.wtr.close(); return
+        res = self.cmd.run(msg)
+        await self.snd(res)
+    # Glossary:
+    # msg = message
+    # good = validation result
+    # cod = error code
+    # txt = error text
+    # mid = message id
+    # typ = type
+    # act = action
+    # tok = token
+    # res = response

@@ -1,31 +1,24 @@
-# Setup Guide
+# Setup
 
-## All platforms
-
-1. Install Python 3.10+.
-2. Open a terminal in the SmartDesk directory.
-3. Run `python -m pip install -r requirements.txt`.
-4. Make sure host and controller are on the same LAN.
-5. Start the host with `python -m backend.main`.
+1. Install Python 3.10 or newer.
+2. Install dependencies with `python -m pip install -r requirements.txt`.
+3. Put the host and Android controller on the same trusted LAN.
+4. Start the host with `python -m backend.main`.
+5. Use UDP discovery or manually connect to the host TCP IP/port.
+6. Enter the temporary pairing code printed by the host.
 
 ## Windows
 
-Run `scripts\\run_windows.bat` or `python -m backend.main`.
-
-Allow Python through the Windows firewall for Private networks when Windows asks. Do not expose the port to Public networks unless you understand the risk.
+Run `scripts/run_windows.bat`. Allow Python on the Private network if Windows Firewall prompts.
 
 ## Linux
 
-Install Tkinter if needed. On Debian/Ubuntu-like systems this is commonly provided by the `python3-tk` package. Install any input-system packages required by `pynput` for your desktop environment.
-
-For reliable input injection, test on an X11 session. Wayland may restrict synthetic input.
-
-Run `./scripts/run_linux.sh`.
+Run `scripts/run_linux.sh`. Test input injection on X11 first. Wayland may restrict synthetic input.
 
 ## macOS
 
-Run `./scripts/run_macos.sh`. If mouse/keyboard injection is denied, open System Settings > Privacy & Security and grant the required Accessibility/Input Monitoring permissions to the terminal or Python application being used.
+Run `scripts/run_macos.sh`. Grant the terminal/Python process the required Accessibility/Input Monitoring permissions when prompted.
 
-## Firewall and Wi-Fi isolation
+## Ports
 
-Discovery uses UDP 8766 and control uses TCP 8765 by default. A firewall or Wi-Fi access point with client isolation can block either. Manual IP connection helps diagnose discovery-specific failures.
+TCP 8765 is the command channel. UDP 8766 is discovery. Both can be changed with environment variables.

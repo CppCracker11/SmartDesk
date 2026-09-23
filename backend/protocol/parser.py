@@ -1,22 +1,34 @@
-from .messages import decode_message
+from .messages import dec
+import json as js
 
 
-class ProtocolParser:
-    def __init__(self, max_line: int = 65536):
-        self.buffer = bytearray()
-        self.max_line = max_line
+class Pro:
+    def __init__(self, lim=65536):
+        self.buf = bytearray()
+        self.lim = lim
 
-    def feed(self, data: bytes) -> list[dict]:
-        self.buffer.extend(data)
-        if len(self.buffer) > self.max_line:
-            raise ValueError("Message buffer exceeded limit")
-
-        messages = []
-        while b"\n" in self.buffer:
-            index = self.buffer.index(b"\n")
-            line = bytes(self.buffer[:index]).strip()
-            del self.buffer[:index + 1]
-            if not line:
+    def fed(self, dat):
+        self.buf.extend(dat)
+        if len(self.buf) > self.lim:
+            raise ValueError("message buffer exceeded limit")
+        out = []
+        while b"\n" in self.buf:
+            idx = self.buf.index(b"\n")
+            lin = bytes(self.buf[:idx]).strip()
+            del self.buf[:idx + 1]
+            if not lin:
                 continue
-            messages.append(decode_message(line))
-        return messages
+            try:
+                out.append(dec(lin))
+            except (js.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+                raise ValueError("invalid json") from exc
+        return out
+# Glossary:
+# Pro = protocol parser
+# fed = feed bytes
+# buf = buffer
+# lim = limit
+# dat = data
+# out = output
+# idx = index
+# lin = line

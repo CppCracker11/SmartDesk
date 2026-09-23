@@ -1,74 +1,64 @@
-import asyncio
+import asyncio as aio
+from .connection import Con
+from .discovery import new
+from ..config import DPT, PRT, VER
+from ..security.pairing import Pai
+from ..security.session import Ses
+from ..utils.system_info import inf
+from ..commands.dispatcher import Cmd
 
-from .connection import ClientConnection
-from .discovery import start_discovery
-from ..config import DISCOVERY_PORT, PORT, PROTOCOL_VERSION
-from ..security.pairing import PairingManager
-from ..security.session import SessionManager
-from ..utils.system_info import get_host_info
+class Srv:
+    def __init__(self, hst, prt, dpt, pto, adp, log):
+        self.hst, self.prt, self.dpt, self.log = hst, prt, dpt, log
+        self.pai, self.ses, self.adp = Pai(pto), Ses(), adp
+        self.srv, self.dtr, self.cmd = None, None, None
 
+    async def sta(self):
+        self.cmd = Cmd(self.adp, self.log)
+        self.srv = await aio.start_server(self.cli, self.hst, self.prt)
+        self.prt = self.srv.sockets[0].getsockname()[1]
+        loop = aio.get_running_loop()
+        try:
+            self.dtr = await new(loop, self.dpt, self.dis, self.log)
+        except OSError as exc:
+            self.log.warning("UDP discovery unavailable: %s", exc)
+        self.log.info("SmartDesk TCP listening on %s:%s", self.hst, self.prt)
+        self.log.info("Pairing code: %s", self.pai.get())
+    # Glossary:
+    # sta = start
+    # hst = host
+    # prt = port
+    # dpt = discovery port
+    # pto = pairing timeout
+    # adp = adapter
+    # log = logger
 
-class SmartDeskServer:
-    def __init__(self, host, port, discovery_port, pairing_timeout, adapter, logger):
-        self.host = host
-        self.port = port
-        self.discovery_port = discovery_port
-        self.logger = logger
-        self.pairing = PairingManager(pairing_timeout)
-        self.session = SessionManager()
-        self.adapter = adapter
-        self.server = None
-        self.discovery_transport = None
-        self.dispatcher = None
+    def dis(self):
+        x = inf(self.prt, VER)
+        return {"type":"SMARTDESK_HOST","hostname":x["hostname"],"ip":x["ip"],"port":self.prt,"protocol_version":VER}
+    # Glossary:
+    # dis = discovery response
+    # x = host info
 
-    async def start(self):
-        from ..commands.dispatcher import CommandDispatcher
-        self.dispatcher = CommandDispatcher(self.adapter, self.logger)
-        self.server = await asyncio.start_server(self.handle_client, self.host, self.port)
-        self.port = self.server.sockets[0].getsockname()[1]
-        self.logger.info("SmartDesk server started")
-        self.logger.info("Listening on %s:%s", self.host, self.port)
-        self.logger.info("Pairing code: %s", self.pairing.get_code())
+    async def cli(self, rdr, wtr):
+        x = inf(self.prt, VER)
+        con = Con(rdr, wtr, self.pai, self.ses, self.cmd, x, self.log)
+        await con.run()
+    # Glossary:
+    # cli = client handler
+    # rdr = reader
+    # wtr = writer
+    # con = connection
 
-        loop = asyncio.get_running_loop()
-        self.discovery_transport = await start_discovery(
-            loop,
-            self.discovery_port,
-            lambda: self.discovery_response(),
-            self.logger,
-        )
+    async def run(self):
+        await self.sta()
+        async with self.srv: await self.srv.serve_forever()
+    # Glossary:
+    # run = serve forever
 
-    def discovery_response(self):
-        info = get_host_info(self.port, PROTOCOL_VERSION)
-        return {
-            "type": "SMARTDESK_HOST",
-            "hostname": info["hostname"],
-            "ip": info["ip"],
-            "port": self.port,
-            "protocol_version": PROTOCOL_VERSION,
-        }
-
-    async def handle_client(self, reader, writer):
-        info = get_host_info(self.port, PROTOCOL_VERSION)
-        connection = ClientConnection(
-            reader,
-            writer,
-            self.pairing,
-            self.session,
-            self.dispatcher,
-            info,
-            self.logger,
-        )
-        await connection.run()
-
-    async def run_forever(self):
-        await self.start()
-        async with self.server:
-            await self.server.serve_forever()
-
-    async def stop(self):
-        if self.discovery_transport:
-            self.discovery_transport.close()
-        if self.server:
-            self.server.close()
-            await self.server.wait_closed()
+    async def end(self):
+        if self.dtr: self.dtr.close()
+        if self.srv:
+            self.srv.close(); await self.srv.wait_closed()
+    # Glossary:
+    # end = stop server

@@ -1,24 +1,12 @@
-import platform
-import socket
+import platform as plt
+import socket as soc
 
-
-def get_local_ip() -> str:
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.connect(("8.8.8.8", 80))
-        ip = sock.getsockname()[0]
-        sock.close()
-        return ip
-    except OSError:
-        return "127.0.0.1"
-
-
-def get_host_info(port: int, protocol_version: str) -> dict:
-    return {
-        "os": platform.system(),
-        "os_version": platform.release(),
-        "hostname": socket.gethostname(),
-        "ip": get_local_ip(),
-        "port": port,
-        "protocol_version": protocol_version,
-    }
+def inf(prt, ver):
+    try: ip = soc.gethostbyname(soc.gethostname())
+    except OSError: ip = "127.0.0.1"
+    return {"hostname": soc.gethostname(), "ip": ip, "port": prt, "protocol_version": ver, "os": plt.system(), "os_version": plt.release()}
+# Glossary:
+# inf = host information
+# prt = port
+# ver = protocol version
+# ip = host IP

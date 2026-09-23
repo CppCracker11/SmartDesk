@@ -1,73 +1,53 @@
-import argparse
-import json
-import socket
-import statistics
-import time
+import argparse as arg
+import json as js
+import socket as soc
+import statistics as sta
+import time as tim
 
+def msg(i):
+    return {"version":"1.0","id":str(i),"type":"system","action":"ping","data":{}}
+# Glossary:
+# msg = message
+# i = request id
 
-def message(msg_id):
-    return {
-        "version": "1.0",
-        "id": str(msg_id),
-        "type": "system",
-        "action": "ping",
-        "data": {},
-    }
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Measure SmartDesk TCP ping latency")
-    parser.add_argument("host")
-    parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--token", required=True)
-    parser.add_argument("--count", type=int, default=20)
-    args = parser.parse_args()
-
-    samples = []
-    failures = 0
-    sock = socket.create_connection((args.host, args.port), timeout=5)
-    sock.settimeout(3)
-    file = sock.makefile("rwb")
-
+def run():
+    par=arg.ArgumentParser(description="Measure SmartDesk TCP ping latency")
+    par.add_argument("host",dest="hst")
+    par.add_argument("--port",dest="prt",type=int,default=8765)
+    par.add_argument("--token",dest="tok",required=True)
+    par.add_argument("--count",dest="cnt",type=int,default=20)
+    cfg=par.parse_args()
+    sam=[]; fail=0
+    sk=soc.create_connection((cfg.hst,cfg.prt),timeout=5); sk.settimeout(3); fil=sk.makefile("rwb")
     try:
-        file.readline()
-        resume = {"version": "1.0", "id": "0", "type": "auth", "action": "resume", "data": {"token": args.token}}
-        file.write((json.dumps(resume) + "\n").encode())
-        file.flush()
-        response = json.loads(file.readline().decode())
-        if response.get("status") != "ok":
-            raise RuntimeError("Session resume failed")
-
-        for i in range(1, args.count + 1):
-            msg = message(i)
-            msg["token"] = args.token
-            started = time.perf_counter()
-            file.write((json.dumps(msg) + "\n").encode())
-            file.flush()
-            line = file.readline()
-            if not line:
-                failures += 1
-                continue
-            response = json.loads(line.decode())
-            if response.get("status") == "ok":
-                samples.append((time.perf_counter() - started) * 1000)
-            else:
-                failures += 1
+        fil.readline()
+        req={"version":"1.0","id":"0","type":"auth","action":"resume","data":{"token":cfg.tok}}
+        fil.write((js.dumps(req)+"\n").encode()); fil.flush(); res=js.loads(fil.readline().decode())
+        if res.get("status")!="ok": raise RuntimeError("session resume failed")
+        for i in range(1,cfg.cnt+1):
+            req=msg(i); req["token"]=cfg.tok; ts=tim.perf_counter(); fil.write((js.dumps(req)+"\n").encode()); fil.flush(); lin=fil.readline()
+            if not lin: fail+=1; continue
+            res=js.loads(lin.decode())
+            if res.get("status")=="ok": sam.append((tim.perf_counter()-ts)*1000)
+            else: fail+=1
     finally:
-        file.close()
-        sock.close()
+        fil.close(); sk.close()
+    rat=len(sam)/cfg.cnt*100 if cfg.cnt else 0
+    print(f"Samples: {cfg.cnt}"); print(f"Successful: {len(sam)}"); print(f"Failed: {fail}"); print(f"Success rate: {rat:.2f}%")
+    if sam:
+        print(f"Average RTT: {sta.mean(sam):.2f} ms"); print(f"Minimum RTT: {min(sam):.2f} ms"); print(f"Maximum RTT: {max(sam):.2f} ms")
+# Glossary:
+# run = latency test
+# par = parser
+# cfg = configuration
+# sam = samples
+# fail = failures
+# sk = socket
+# fil = file
+# req = request
+# res = response
+# lin = line
+# ts = start time
+# rat = success rate
 
-    total = args.count
-    success_rate = len(samples) / total * 100 if total else 0
-    print(f"Samples: {total}")
-    print(f"Successful: {len(samples)}")
-    print(f"Failed: {failures}")
-    print(f"Success rate: {success_rate:.2f}%")
-    if samples:
-        print(f"Average RTT: {statistics.mean(samples):.2f} ms")
-        print(f"Minimum RTT: {min(samples):.2f} ms")
-        print(f"Maximum RTT: {max(samples):.2f} ms")
-
-
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": run()

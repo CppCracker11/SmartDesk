@@ -1,51 +1,65 @@
-from .base import OSAdapter
-from .common import keyboard, mouse, pynput_key, require_pynput
+from .base import Adp
+from .common import kb, ms, key, req, med
 
-
-class LinuxAdapter(OSAdapter):
+class Lin(Adp):
     def __init__(self):
-        require_pynput()
-        self.mouse_controller = mouse.Controller()
-        self.keyboard_controller = keyboard.Controller()
+        req()
+        self.mou = ms.Controller()
+        self.key = kb.Controller()
 
-    def mouse_move(self, dx, dy):
-        self.mouse_controller.move(dx, dy)
+    def mov(self, dx, dy):
+        self.mou.move(dx, dy)
+    # Glossary:
+    # mov = mouse move
+    # mou = mouse controller
 
-    def mouse_click(self, button):
-        self.mouse_controller.click(getattr(mouse.Button, button), 1)
+    def clk(self, btn):
+        self.mou.click(getattr(ms.Button, btn), 1)
+    # Glossary:
+    # clk = click
+    # btn = button
 
-    def mouse_double_click(self):
-        self.mouse_controller.click(mouse.Button.left, 2)
+    def dbl(self):
+        self.mou.click(ms.Button.left, 2)
+    # Glossary:
+    # dbl = double click
 
-    def mouse_scroll(self, dx, dy):
-        self.mouse_controller.scroll(dx, dy)
+    def scr(self, dx, dy):
+        self.mou.scroll(dx, dy)
+    # Glossary:
+    # scr = scroll
 
-    def key_press(self, key):
-        self.keyboard_controller.press(pynput_key(key))
+    def prs(self, val):
+        self.key.press(key(val))
+    # Glossary:
+    # prs = press
+    # val = key value
 
-    def key_release(self, key):
-        self.keyboard_controller.release(pynput_key(key))
+    def rel(self, val):
+        self.key.release(key(val))
+    # Glossary:
+    # rel = release
 
-    def key_combo(self, keys):
-        pressed = [pynput_key(key) for key in keys]
+    def cmb(self, ks):
+        ps = [key(x) for x in ks]
         try:
-            for key in pressed:
-                self.keyboard_controller.press(key)
+            for x in ps: self.key.press(x)
         finally:
-            for key in reversed(pressed):
-                self.keyboard_controller.release(key)
+            for x in reversed(ps): self.key.release(x)
+    # Glossary:
+    # cmb = combination
+    # ks = keys
+    # ps = translated keys
 
-    def media_control(self, action):
-        media = {
-            "play_pause": keyboard.Key.media_play_pause,
-            "next": keyboard.Key.media_next,
-            "previous": keyboard.Key.media_previous,
-            "volume_up": keyboard.Key.media_volume_up,
-            "volume_down": keyboard.Key.media_volume_down,
-            "mute": keyboard.Key.media_volume_mute,
-        }
-        self.keyboard_controller.press(media[action])
-        self.keyboard_controller.release(media[action])
+    def med(self, act):
+        x = med()[act]
+        self.key.press(x); self.key.release(x)
+    # Glossary:
+    # med = media control
+    # act = action
+    # x = media key
 
-    def presentation_control(self, action):
-        self.key_press("RIGHT" if action == "next" else "LEFT")
+    def pre(self, act):
+        self.prs("RIGHT" if act == "next" else "LEFT")
+    # Glossary:
+    # pre = presentation control

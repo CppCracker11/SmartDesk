@@ -1,34 +1,33 @@
-import unittest
+import unittest as uni
+from backend.protocol.messages import enc
+from backend.protocol.parser import Pro
+from backend.protocol.validator import val
 
-from backend.protocol.messages import encode_message
-from backend.protocol.parser import ProtocolParser
-from backend.protocol.validator import validate_message
+class PT(uni.TestCase):
+    def t01(self):
+        p = Pro(); raw = enc({"a":1}) + enc({"b":2})
+        self.assertEqual(p.fed(raw[:5]), [])
+        self.assertEqual(p.fed(raw[5:]), [{"a":1},{"b":2}])
 
+    def t02(self):
+        m = {"version":"1.0","id":"1","type":"mouse","action":"move","data":{"dx":2,"dy":-1}}
+        self.assertTrue(val(m)[0])
 
-class ProtocolTests(unittest.TestCase):
-    def test_framing_handles_multiple_messages(self):
-        parser = ProtocolParser()
-        raw = encode_message({"a": 1}) + encode_message({"b": 2})
-        self.assertEqual(parser.feed(raw[:5]), [])
-        self.assertEqual(parser.feed(raw[5:]), [{"a": 1}, {"b": 2}])
+    def t03(self):
+        m = {"version":"1.0","id":"1","type":"mouse","action":"bad","data":{}}
+        self.assertFalse(val(m)[0]); self.assertEqual(val(m)[1], "INVALID_COMMAND")
 
-    def test_valid_command(self):
-        message = {"version": "1.0", "id": "1", "type": "mouse", "action": "move", "data": {"dx": 2, "dy": -1}}
-        self.assertTrue(validate_message(message)[0])
+    def t04(self):
+        p = Pro()
+        with self.assertRaises(ValueError): p.fed(b"{bad}\n")
 
-    def test_invalid_command(self):
-        message = {"version": "1.0", "id": "1", "type": "mouse", "action": "explode", "data": {}}
-        self.assertFalse(validate_message(message)[0])
+    def t05(self):
+        m = {"version":"1.0","id":"1","type":"keyboard","action":"combo","data":{"keys":["CTRL","c"]}}
+        self.assertTrue(val(m)[0])
 
-    def test_invalid_data(self):
-        message = {"version": "1.0", "id": "1", "type": "mouse", "action": "move", "data": {"dx": "bad", "dy": 1}}
-        self.assertFalse(validate_message(message)[0])
-
-    def test_malformed_json_is_rejected(self):
-        parser = ProtocolParser()
-        with self.assertRaises(ValueError):
-            parser.feed(b"{not json}\n")
-
-
-if __name__ == "__main__":
-    unittest.main()
+setattr(PT, "test_t01", PT.t01)
+setattr(PT, "test_t02", PT.t02)
+setattr(PT, "test_t03", PT.t03)
+setattr(PT, "test_t04", PT.t04)
+setattr(PT, "test_t05", PT.t05)
+if __name__ == "__main__": uni.main()

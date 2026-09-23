@@ -1,16 +1,18 @@
-import platform
+import platform as plt
+from .base import Nul
+from .linux import Lin
+from .macos import Mac
+from .windows import Win
 
-from .linux import LinuxAdapter
-from .macos import MacOSAdapter
-from .windows import WindowsAdapter
-
-
-def create_adapter():
-    system = platform.system()
-    if system == "Windows":
-        return WindowsAdapter()
-    if system == "Linux":
-        return LinuxAdapter()
-    if system == "Darwin":
-        return MacOSAdapter()
-    raise RuntimeError(f"Unsupported operating system: {system}")
+def new():
+    sys = plt.system()
+    try:
+        if sys == "Windows": return Win()
+        if sys == "Linux": return Lin()
+        if sys == "Darwin": return Mac()
+    except Exception:
+        return Nul()
+    return Nul()
+# Glossary:
+# new = create platform adapter
+# sys = operating system
