@@ -8,3 +8,6 @@ env/
 *.log
 .idea/
 .vscode/
+
+/build/
+/dist/

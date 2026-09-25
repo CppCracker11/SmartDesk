@@ -1,0 +1,1 @@
+"""SmartDesk desktop host application."""

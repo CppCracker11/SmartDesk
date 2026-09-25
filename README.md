@@ -97,3 +97,24 @@ SmartDesk/
   scripts/
   requirements.txt
 ```
+
+## Desktop application
+
+SmartDesk now includes a polished PySide6 desktop host application around the existing backend. The backend protocol and host implementation remain unchanged; the desktop layer starts the existing `Srv`, displays the live pairing code, shows host/session state, exposes host settings, supports the Windows system tray, and can register itself for Windows startup.
+
+Run the desktop application from the repository root:
+
+```bash
+python -m pip install -r requirements.txt
+python -m desktop.main
+```
+
+For a Windows packaged build:
+
+```text
+scripts/build_windows_desktop.bat
+```
+
+The resulting executable is `dist\SmartDesk.exe`.
+
+The desktop GUI uses PySide6 for the interface and qasync to run the Qt event loop together with the existing asyncio host server. `desktop/` is a frontend layer; the networking protocol, pairing/session model and OS adapters under `backend/` are reused as implemented.
